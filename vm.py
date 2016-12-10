@@ -16,12 +16,14 @@ class VirtualMachine:
         with open(fname, 'rb') as f:
             lo, hi = map(ord, f.read(2))
             while True:
-                byte = (hi << 8) | lo
-                self.data.append(byte)
+                self.data.append((hi << 8) | lo)
                 try:
                     lo, hi = map(ord, f.read(2))
                 except ValueError:
                     break
+            print("Loaded %s bytes of program binary. " % len(self.data))
+            while len(self.data) < 32769:
+                self.data.append(0)
 
     def core_dump(self):
         print("PC: %s" % self.pc)
@@ -34,9 +36,7 @@ class VirtualMachine:
         return res
 
     def next_bytes(self, num_bytes):
-        out = self.data[self.pc:self.pc+num_bytes]
-        self.pc += num_bytes
-        return out
+        return [self.next_byte() for _ in range(num_bytes)]
 
     def load_val(self, loc):
         if 0 <= loc <= 32767:
@@ -47,7 +47,6 @@ class VirtualMachine:
             self.core_dump()
             raise ValueError("Invalid memory location: %s" % loc)
 
-
     def store_reg(self, loc, val):
         if val >= 32768:
             val = self.load_val(val)
@@ -55,8 +54,8 @@ class VirtualMachine:
             self.registers[loc] = val
         elif 0 <= loc <= 7:
             self.registers[loc + 32768] = val
-        # else:
-        #     raise ValueError("Invalid register: %s" % loc)
+        else:
+            raise ValueError("Invalid register: %s" % loc)
 
     def read_mem(self, loc):
         return self.data[loc]
@@ -93,12 +92,14 @@ class OperatorUnit:
             13: partial(self.op_operator, operator.__or__),
             14: self.op_not,
             15: self.op_rmem,
-            # 16: self.op_wmem,
+            16: self.op_wmem,
             17: self.op_call,
+            18: self.op_ret,
             19: self.op_out,
             20: self.op_in,
             21: self.noop,
         }
+        self.input_buf = ''
 
     def next_values(self, i):
         return map(self.vm.load_val, self.vm.next_bytes(i))
@@ -113,9 +114,12 @@ class OperatorUnit:
         a = self.next_value()
         print(chr(a), end="")
 
-    def op_in(self, a):
-        i = raw_input()
-        print(i)
+    def op_in(self):
+        a = self.vm.next_byte()
+        if not self.input_buf:
+            self.input_buf = raw_input('>>') + '\n'
+        self.vm.store_reg(a, ord(self.input_buf[0]))
+        self.input_buf = self.input_buf[1:]
 
     def op_operator(self, operation):
         a = self.vm.next_byte()
@@ -148,12 +152,17 @@ class OperatorUnit:
         a = self.next_value()
         self.vm.pc = a
 
+    def op_ret(self):
+        new_pc = self.vm.stack_pop()
+        self.vm.pc = new_pc
+
     def op_set(self):
         a = self.vm.next_byte()
         b = self.next_value()
         self.vm.store_reg(a, b)
 
     def op_halt(self):
+        print("Halting")
         self.vm.core_dump()
         sys.exit()
 
@@ -167,15 +176,14 @@ class OperatorUnit:
         self.vm.store_reg(a, res)
 
     def op_wmem(self):
-        a = self.vm.next_byte()
-        b = self.vm.next_value()
+        a = self.next_value()
+        b = self.next_value()
         self.vm.write_mem(a, b)
 
     def op_rmem(self):
-        a = self.next_value()
-        b = self.vm.next_byte()
+        a = self.vm.next_byte()
+        b = self.next_value()
         val = self.vm.read_mem(b)
-        print(a, b, val)
         self.vm.store_reg(a, val)
 
 
