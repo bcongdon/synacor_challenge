@@ -1,10 +1,10 @@
 from __future__ import print_function
 from collections import defaultdict
 from functools import partial
-from contextlib import contextmanager
 import operator
 import inspect
 import sys
+import atexit
 
 
 class VirtualMachine:
@@ -26,6 +26,7 @@ class VirtualMachine:
                 self.data.append(0)
 
     def core_dump(self):
+        print("*** Core Dump ***")
         print("PC: %s" % self.pc)
         print("Registers:")
         print(self.registers)
@@ -196,7 +197,15 @@ def num_args(func):
 if __name__ == '__main__':
     virtual_machine = VirtualMachine('challenge.bin')
     op_unit = OperatorUnit(virtual_machine)
+    cycle_count = 0
+
+
+    def on_close():
+        print("Cycle count: %s" % cycle_count)
+
+    atexit.register(on_close)
     while True:
+        cycle_count += 1
         op = virtual_machine.next_byte()
         if op in op_unit.op_functions:
             op_unit.op_functions[op]()
