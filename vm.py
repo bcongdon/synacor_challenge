@@ -43,7 +43,7 @@ class VirtualMachine:
         if 0 <= loc <= 32767:
             return loc
         elif 32768 <= loc <= 32775:
-            return self.registers[loc]
+            return self.registers[loc - 32768]
         else:
             self.core_dump()
             raise ValueError("Invalid memory location: %s" % loc)
@@ -52,9 +52,9 @@ class VirtualMachine:
         if val >= 32768:
             val = self.load_val(val)
         if 32768 <= loc <= 32775:
-            self.registers[loc] = val
+            self.registers[loc - 32768] = val
         elif 0 <= loc <= 7:
-            self.registers[loc + 32768] = val
+            self.registers[loc] = val
         else:
             raise ValueError("Invalid register: %s" % loc)
 
@@ -142,16 +142,22 @@ class OperatorUnit:
 
     def op_in(self, a):
         if not self.input_buf:
-            raw, done = raw_input('>>'), False
+            raw, done = raw_input('>>').lower(), False
             while not done:
                 if raw == 'pc':
                     print("PC: " + str(self.vm.pc))
-                if raw == 'cd':
+                elif raw == 'cd':
                     self.vm.core_dump()
+                elif raw == 'hack_teleporter':
+                    self.vm.data[6027:6030] = [1, 32768, 6]  # set $0, 6
+                    self.vm.data[6030] = 18  # ret
+                    self.vm.registers[7] = 25734
                 else:
                     done = True
                     self.input_buf = raw + '\n'
-                raw = raw_input('>>')
+                    with open('walkthrough.txt', 'a') as f:
+                        f.write(raw + '\n')
+                raw = raw_input('>>') if not done else raw
         self.vm.store_reg(a, ord(self.input_buf[0]))
         self.input_buf = self.input_buf[1:]
 
@@ -237,6 +243,8 @@ if __name__ == '__main__':
         print("Cycle count: %s" % cycle_count)
 
     atexit.register(on_close)
+    f = open('walkthrough.txt', 'w+')
+    f.close()
     with open('bytecode.asm', 'w+') as f:
         while True:
             cycle_count += 1
@@ -248,10 +256,11 @@ if __name__ == '__main__':
                 args_out = map(format_val, args)
                 if op == 19 and not args_out[0][0] == '$':
                     args_out[0] = "'%s'" % chr(int(args_out[0])).encode('string-escape')
-                out = op_unit.opcodes[op] + '\t'
+                out = str(virtual_machine.pc - 1) + ':\t'
+                out += op_unit.opcodes[op] + '\t'
                 out += ', '.join(args_out)
                 out += '\n'
-                f.write(out)
+                # f.write(out)
                 func(*args)
             else:
                 print("Don't have operation for opcode: %s" % op)

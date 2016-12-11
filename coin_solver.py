@@ -3,7 +3,7 @@ from itertools import permutations
 
 def check_solution(arr):
     a, b, c, d, e = arr
-    return a + b * c ** 2 + d **3 - e == 399
+    return a + b * c ** 2 + d ** 3 - e == 399
 
 if __name__ == '__main__':
     coins = {
